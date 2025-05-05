@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}給与管理アプリ | ダッシュボード{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>給与管理ダッシュボード</h1>
+            <a href="{{ url_for('main.salary_management') }}" class="btn btn-outline-primary">
+                <i class="fas fa-table"></i> 給与データ管理
+            </a>
+        </div>
+        
+        <!-- 年度選択 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">年度選択</h5>
+            </div>
+            <div class="card-body">
+                <form id="yearSelectForm" method="GET" action="{{ url_for('main.index') }}" class="d-flex align-items-center">
+                    <label for="year_selector" class="form-label me-3 mb-0">表示する年度:</label>
+                    <select id="year_selector" name="year_id" class="form-select" style="max-width: 200px;">
+                        {% for year in years %}
+                        <option value="{{ year.year_id }}" {% if year.year_id == selected_year %}selected{% endif %}>
+                            {{ year.display_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 年度別サマリーグラフ -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">年度別収入サマリー</h5>
+            </div>
+            <div class="card-body">
+                <div id="yearlyChartContainer">
+                    <canvas id="yearlyChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 当年度月次グラフ -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{{ get_fiscal_year_label(selected_year) }} 月次収入</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div id="monthlyChartContainer">
+                            <canvas id="monthlyChart" height="300"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">年度累計</h5>
+                                <div class="summary-stats">
+                                    {% set year_total = 0 %}
+                                    {% set bonus_total = 0 %}
+                                    {% for item in year_data %}
+                                        {% set year_total = year_total + item.monthly_total %}
+                                        {% set bonus_total = bonus_total + item.bonus_total %}
+                                    {% endfor %}
+                                    
+                                    <div class="summary-item">
+                                        <span class="summary-label">月次収入合計:</span>
+                                        <span class="summary-value">{{ format_currency(year_total) }}</span>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span class="summary-label">賞与合計:</span>
+                                        <span class="summary-value">{{ format_currency(bonus_total) }}</span>
+                                    </div>
+                                    <div class="summary-item total">
+                                        <span class="summary-label">総合計:</span>
+                                        <span class="summary-value">{{ format_currency(year_total + bonus_total) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 給与データ管理へのリンク -->
+        <div class="card">
+            <div class="card-body text-center py-4">
+                <h5 class="card-title mb-3">詳細な給与データの管理</h5>
+                <p class="card-text mb-4">月ごとの給与データの閲覧、編集は専用ページで行います</p>
+                <a href="{{ url_for('main.salary_management', year_id=selected_year) }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-table me-2"></i> 給与データ管理ページへ
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 選択された年度のID
+    const selectedYear = parseInt("{{ selected_year }}");
+    
+    // アプリケーションのベースURL
+    const baseUrl = "{{ request.script_root }}";
+    
+    // ページ読み込み時にグラフを描画
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM読み込み完了...");
+        console.log("Using base URL:", baseUrl);
+        
+        // APIからデータ取得
+        fetchYearlySummary();
+        fetchMonthlyData(selectedYear);
+        
+        // 年度選択が変更されたら自動的にフォームを送信
+        const yearSelector = document.getElementById('year_selector');
+        if (yearSelector) {
+            yearSelector.addEventListener('change', function() {
+                document.getElementById('yearSelectForm').submit();
+            });
+        }
+    });
+    
+    // 年度サマリーデータ取得と描画
+    function fetchYearlySummary() {
+        console.log("年度サマリー取得開始...");
+        fetch(`${baseUrl}/api/yearly_summary`)
+            .then(response => {
+                console.log("年度サマリーAPIレスポンス:", response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("年度サマリーデータ詳細:", JSON.stringify(data));
+                renderYearlyChart(data);
+            })
+            .catch(error => {
+                console.error('API Error:', error, 'URL:', `${baseUrl}/api/yearly_summary`);
+            });
+    }
+    
+    // 月次データ取得と描画
+    function fetchMonthlyData(yearId) {
+        console.log(`月次データ取得開始... 年度ID: ${yearId}`);
+        fetch(`${baseUrl}/api/year/${yearId}`)
+            .then(response => {
+                console.log("月次データAPIレスポンス:", response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("月次データ詳細:", JSON.stringify(data));
+                renderMonthlyChart(data);
+            })
+            .catch(error => {
+                console.error('API Error:', error, 'URL:', `${baseUrl}/api/year/${yearId}`);
+            });
+    }
+    
+    // 年度別グラフ描画
+    function renderYearlyChart(data) {
+        console.log("年度別グラフを描画します:", data);
+        
+        // データが空か確認
+        if (!data || !data.labels || data.labels.length === 0) {
+            console.error("年度別データが空です");
+            document.getElementById('yearlyChartContainer').innerHTML = '<div class="alert alert-warning">データがありません</div>';
+            return;
+        }
+        
+        // Canvas要素の取得を試みる
+        const yearlyChartElement = document.getElementById('yearlyChart');
+        if (!yearlyChartElement) {
+            console.error("年度別グラフのCanvas要素が見つかりません");
+            document.getElementById('yearlyChartContainer').innerHTML = '<div class="alert alert-warning">グラフ描画エリアが見つかりません</div>';
+            return;
+        }
+        
+        try {
+            console.log("グラフ描画開始...");
+            const ctx = yearlyChartElement.getContext('2d');
+            
+            // 既存のチャートを削除
+            if (window.yearlyChart && typeof window.yearlyChart.destroy === 'function') {
+                console.log("既存のグラフを削除します");
+                window.yearlyChart.destroy();
+            }
+            
+            // データ型の確認と変換
+            console.log("年度ラベル:", data.labels);
+            console.log("月次合計データ:", data.total_monthly);
+            console.log("賞与合計データ:", data.total_bonus);
+            console.log("総合計データ:", data.grand_total);
+            
+            // データが配列でない場合の対策
+            const labels = Array.isArray(data.labels) ? data.labels : [];
+            const monthlyData = Array.isArray(data.total_monthly) 
+                ? data.total_monthly.map(val => Number(val) || 0)
+                : [];
+            const bonusData = Array.isArray(data.total_bonus)
+                ? data.total_bonus.map(val => Number(val) || 0)
+                : [];
+            const grandTotalData = Array.isArray(data.grand_total)
+                ? data.grand_total.map(val => Number(val) || 0)
+                : [];
+            
+            console.log("変換後年度ラベル:", labels);
+            console.log("変換後月次合計:", monthlyData);
+            console.log("変換後賞与合計:", bonusData);
+            console.log("変換後総合計:", grandTotalData);
+            
+            // データが存在しない場合
+            if (labels.length === 0 || monthlyData.length === 0) {
+                console.error("年度別データが不正です");
+                document.getElementById('yearlyChartContainer').innerHTML = '<div class="alert alert-warning">データが不正です</div>';
+                return;
+            }
+            
+            console.log("Chart.jsでグラフを描画します");
+            window.yearlyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '総合計',
+                            data: grandTotalData,
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 3,
+                            tension: 0.1,
+                            fill: false,
+                            pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+                            pointRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '年度別収入サマリー'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ¥' + new Intl.NumberFormat('ja-JP').format(context.raw);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '¥' + new Intl.NumberFormat('ja-JP').format(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            console.log("年度別グラフの描画完了");
+        } catch (error) {
+            console.error("年度別グラフの描画中にエラーが発生しました:", error);
+            document.getElementById('yearlyChartContainer').innerHTML = '<div class="alert alert-danger">グラフの描画中にエラーが発生しました: ' + error.message + '</div>';
+        }
+    }
+    
+    // 月次グラフ描画
+    function renderMonthlyChart(data) {
+        console.log("月次グラフを描画します:", data);
+        
+        // データが空か確認
+        if (!data || !data.labels || data.labels.length === 0) {
+            console.error("月次データが空です");
+            document.getElementById('monthlyChartContainer').innerHTML = '<div class="alert alert-warning">データがありません</div>';
+            return;
+        }
+        
+        // Canvas要素の取得を試みる
+        const monthlyChartElement = document.getElementById('monthlyChart');
+        if (!monthlyChartElement) {
+            console.error("月次グラフのCanvas要素が見つかりません");
+            document.getElementById('monthlyChartContainer').innerHTML = '<div class="alert alert-warning">グラフ描画エリアが見つかりません</div>';
+            return;
+        }
+        
+        try {
+            console.log("月次グラフの描画開始...");
+            const ctx = monthlyChartElement.getContext('2d');
+            
+            // 既存のチャートを削除
+            if (window.monthlyChart && typeof window.monthlyChart.destroy === 'function') {
+                console.log("既存の月次グラフを削除します");
+                window.monthlyChart.destroy();
+            }
+            
+            // データ型の確認
+            console.log("月次収入データ型:", typeof data.monthly_totals[0], "値:", data.monthly_totals);
+            console.log("賞与データ型:", typeof data.bonus_totals[0], "値:", data.bonus_totals);
+            console.log("累計額データ型:", typeof data.cumulative_totals[0], "値:", data.cumulative_totals);
+            
+            // データを明示的に数値に変換
+            const monthlyTotals = data.monthly_totals.map(val => Number(val) || 0);
+            const bonusTotals = data.bonus_totals.map(val => Number(val) || 0);
+            const cumulativeTotals = data.cumulative_totals.map(val => Number(val) || 0);
+            
+            console.log("変換後月次収入:", monthlyTotals);
+            console.log("変換後賞与:", bonusTotals);
+            console.log("変換後累計額:", cumulativeTotals);
+            
+            // 月次収入と賞与の合計を計算
+            const monthlySum = monthlyTotals.reduce((acc, curr) => acc + curr, 0);
+            const bonusSum = bonusTotals.reduce((acc, curr) => acc + curr, 0);
+            const totalSum = monthlySum + bonusSum;
+            
+            console.log("合計値計算:", {
+                monthlySum,
+                bonusSum,
+                totalSum
+            });
+            
+            // 合計値を表示する要素を更新
+            const summaryStats = document.querySelector('.summary-stats');
+            if (summaryStats) {
+                console.log("合計値を更新します");
+                summaryStats.innerHTML = `
+                    <div class="summary-item">
+                        <span class="summary-label">月次収入合計:</span>
+                        <span class="summary-value">¥${monthlySum.toLocaleString()}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">賞与合計:</span>
+                        <span class="summary-value">¥${bonusSum.toLocaleString()}</span>
+                    </div>
+                    <div class="summary-item total">
+                        <span class="summary-label">総合計:</span>
+                        <span class="summary-value">¥${totalSum.toLocaleString()}</span>
+                    </div>
+                `;
+            } else {
+                console.error("合計値を表示する要素が見つかりません");
+            }
+            
+            console.log("月次グラフを作成します");
+            window.monthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: '月次収入',
+                            data: monthlyTotals,
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            type: 'bar'
+                        },
+                        {
+                            label: '賞与',
+                            data: bonusTotals,
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1,
+                            type: 'bar'
+                        },
+                        {
+                            label: '累計額',
+                            data: cumulativeTotals,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2,
+                            type: 'line',
+                            fill: false,
+                            tension: 0.1,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '¥' + new Intl.NumberFormat('ja-JP').format(value);
+                                }
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '¥' + new Intl.NumberFormat('ja-JP').format(value);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += '¥' + new Intl.NumberFormat('ja-JP').format(context.raw);
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            console.log("月次グラフの描画完了");
+        } catch (error) {
+            console.error("月次グラフの描画中にエラーが発生しました:", error);
+            document.getElementById('monthlyChartContainer').innerHTML = '<div class="alert alert-danger">グラフの描画中にエラーが発生しました: ' + error.message + '</div>';
+        }
+    }
+</script>
+{% endblock %} 

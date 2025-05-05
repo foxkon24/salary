@@ -1,0 +1,20 @@
+# 基本設定
+FLASK_APP=app
+FLASK_ENV=development
+SECRET_KEY=dev_key_for_development
+
+# データベース接続情報
+DATABASE_URL=mysql://user:password@localhost/salary
+# または個別に設定
+MYSQL_HOST=localhost
+MYSQL_USER=user
+MYSQL_PASSWORD=password
+MYSQL_DB=salary
+
+# アプリケーション設定
+DEBUG=True
+PORT=8090
+
+# 会計年度設定
+FISCAL_YEAR_START_MONTH=5
+FISCAL_YEAR_END_MONTH=4 

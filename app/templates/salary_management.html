@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}給与管理アプリ | 給与データ管理{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>給与データ管理</h1>
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-line"></i> ダッシュボードに戻る
+            </a>
+        </div>
+        
+        <!-- 年度選択 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">年度選択</h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addYearModal">
+                        <i class="fas fa-plus"></i> 新しい年度を追加
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="yearSelectForm" method="GET" action="{{ url_for('main.salary_management') }}" class="d-flex align-items-center">
+                    <label for="year_selector" class="form-label me-3 mb-0">表示する年度:</label>
+                    <select id="year_selector" name="year_id" class="form-select" style="max-width: 200px;">
+                        {% for year in years %}
+                        <option value="{{ year.year_id }}" {% if year.year_id == selected_year %}selected{% endif %}>
+                            {{ year.display_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 月別データテーブル -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">{{ get_fiscal_year_label(selected_year) }} 給与データ</h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" id="toggleDetailsBtn">
+                        <i class="fas fa-columns"></i> 表示切替
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0" id="salaryTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>月</th>
+                                <th>年</th>
+                                <th class="text-end">月次総額</th>
+                                <th class="text-end">月次控除</th>
+                                <th class="text-end detail-column">年末調整</th>
+                                <th class="text-end detail-column">月次所得</th>
+                                <th class="text-end">賞与総額</th>
+                                <th class="text-end detail-column">賞与控除</th>
+                                <th class="text-end detail-column">賞与所得</th>
+                                <th class="text-end">合計</th>
+                                <th class="text-end detail-column">累計</th>
+                                <th class="text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in year_data %}
+                            <tr>
+                                <td>{{ get_month_name(item.month) }}</td>
+                                <td>{{ item.year }}</td>
+                                <td class="text-end">{{ format_currency(item.monthly_total) }}</td>
+                                <td class="text-end">{{ format_currency(item.monthly_deduction) }}</td>
+                                <td class="text-end detail-column">{{ format_currency(item.year_end_adjustment) }}</td>
+                                <td class="text-end detail-column">{{ format_currency(item.monthly_income) }}</td>
+                                <td class="text-end">{{ format_currency(item.bonus_total) }}</td>
+                                <td class="text-end detail-column">{{ format_currency(item.bonus_deduction) }}</td>
+                                <td class="text-end detail-column">{{ format_currency(item.bonus_income) }}</td>
+                                <td class="text-end">{{ format_currency(item.total) }}</td>
+                                <td class="text-end detail-column">{{ format_currency(item.cumulative_total) }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('main.edit_income', id=item.id) }}" class="btn btn-sm btn-primary">編集</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="2">合計</th>
+                                <th class="text-end">{{ format_currency(year_data|sum(attribute='monthly_total')) }}</th>
+                                <th class="text-end">{{ format_currency(year_data|sum(attribute='monthly_deduction')) }}</th>
+                                <th class="text-end detail-column">{{ format_currency(year_data|sum(attribute='year_end_adjustment')) }}</th>
+                                <th class="text-end detail-column">{{ format_currency(year_data|sum(attribute='monthly_income')) }}</th>
+                                <th class="text-end">{{ format_currency(year_data|sum(attribute='bonus_total')) }}</th>
+                                <th class="text-end detail-column">{{ format_currency(year_data|sum(attribute='bonus_deduction')) }}</th>
+                                <th class="text-end detail-column">{{ format_currency(year_data|sum(attribute='bonus_income')) }}</th>
+                                <th class="text-end">{{ format_currency(year_data|sum(attribute='total')) }}</th>
+                                <th class="text-end detail-column">-</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 年度追加モーダル -->
+<div class="modal fade" id="addYearModal" tabindex="-1" aria-labelledby="addYearModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addYearModalLabel">新しい年度を追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('main.add_year') }}" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="year_id" class="form-label">年度 (西暦)</label>
+                        <input type="number" class="form-control" id="year_id" name="year_id" 
+                               min="2000" max="2100" step="1" required
+                               value="{{ current_year }}">
+                        <div class="form-text">会計年度の開始年を入力してください</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">追加</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 年度選択時に自動送信
+        const yearSelector = document.getElementById('year_selector');
+        yearSelector.addEventListener('change', function() {
+            document.getElementById('yearSelectForm').submit();
+        });
+        
+        // 詳細表示切替
+        const toggleDetailsBtn = document.getElementById('toggleDetailsBtn');
+        const detailColumns = document.querySelectorAll('.detail-column');
+        
+        // ローカルストレージから表示状態を取得
+        const showDetails = localStorage.getItem('showSalaryDetails') !== 'false';
+        
+        // 初期状態設定
+        setDetailColumnsVisibility(showDetails);
+        
+        toggleDetailsBtn.addEventListener('click', function() {
+            const currentState = localStorage.getItem('showSalaryDetails') !== 'false';
+            const newState = !currentState;
+            
+            // 表示状態を更新
+            localStorage.setItem('showSalaryDetails', newState);
+            setDetailColumnsVisibility(newState);
+        });
+        
+        function setDetailColumnsVisibility(show) {
+            detailColumns.forEach(col => {
+                if (show) {
+                    col.classList.remove('d-none');
+                } else {
+                    col.classList.add('d-none');
+                }
+            });
+            
+            // ボタンのラベルを更新
+            toggleDetailsBtn.innerHTML = show ? 
+                '<i class="fas fa-columns"></i> 簡易表示' : 
+                '<i class="fas fa-columns"></i> 詳細表示';
+        }
+    });
+</script>
+{% endblock %} 

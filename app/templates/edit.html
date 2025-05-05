@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}給与情報編集 | {{ income.year }}年{{ get_month_name(income.month) }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{{ income.year }}年{{ get_month_name(income.month) }} 給与情報編集</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.edit_income', id=income.id) }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h5>月次情報</h5>
+                            
+                            <div class="mb-3">
+                                <label for="year" class="form-label">年</label>
+                                <input type="number" class="form-control" id="year" value="{{ income.year }}" readonly>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="monthly_total" class="form-label">月次総額</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="monthly_total" name="monthly_total" 
+                                           value="{{ income.monthly_total|int }}" step="1" min="0" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="monthly_deduction" class="form-label">月次控除額</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="monthly_deduction" name="monthly_deduction" 
+                                           value="{{ income.monthly_deduction|int }}" step="1" min="0" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="year_end_adjustment" class="form-label">年末調整額</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="year_end_adjustment" name="year_end_adjustment" 
+                                           value="{{ income.year_end_adjustment|int }}" step="1">
+                                </div>
+                                <div class="form-text">※プラス値は還付、マイナス値は追加徴収</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="monthly_income" class="form-label">月次所得額 (自動計算)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="monthly_income" 
+                                           value="{{ income.monthly_income|int }}" readonly>
+                                </div>
+                                <div class="form-text">月次総額 - 月次控除額 + 年末調整額</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h5>賞与情報</h5>
+                            
+                            <div class="mb-3">
+                                <label for="bonus_total" class="form-label">賞与総額</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="bonus_total" name="bonus_total" 
+                                           value="{{ income.bonus_total|int }}" step="1" min="0" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="bonus_deduction" class="form-label">賞与控除額</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="bonus_deduction" name="bonus_deduction" 
+                                           value="{{ income.bonus_deduction|int }}" step="1" min="0" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="bonus_income" class="form-label">賞与所得額 (自動計算)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="bonus_income" 
+                                           value="{{ income.bonus_income|int }}" readonly>
+                                </div>
+                                <div class="form-text">賞与総額 - 賞与控除額</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="total" class="form-label">当月合計 (自動計算)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">¥</span>
+                                    <input type="number" class="form-control" id="total" 
+                                           value="{{ income.total|int }}" readonly>
+                                </div>
+                                <div class="form-text">月次総額 + 賞与総額</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('main.salary_management', year_id=income.year_id) }}" class="btn btn-secondary">キャンセル</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 自動計算フィールドの更新関数
+    function updateCalculatedFields() {
+        // 入力値の取得
+        const monthlyTotal = parseInt(document.getElementById('monthly_total').value) || 0;
+        const monthlyDeduction = parseInt(document.getElementById('monthly_deduction').value) || 0;
+        const yearEndAdjustment = parseInt(document.getElementById('year_end_adjustment').value) || 0;
+        const bonusTotal = parseInt(document.getElementById('bonus_total').value) || 0;
+        const bonusDeduction = parseInt(document.getElementById('bonus_deduction').value) || 0;
+        
+        // 計算
+        const monthlyIncome = monthlyTotal - monthlyDeduction + yearEndAdjustment;
+        const bonusIncome = bonusTotal - bonusDeduction;
+        const total = monthlyTotal + bonusTotal;
+        
+        // 計算結果の設定（整数値）
+        document.getElementById('monthly_income').value = Math.round(monthlyIncome);
+        document.getElementById('bonus_income').value = Math.round(bonusIncome);
+        document.getElementById('total').value = Math.round(total);
+    }
+    
+    // 入力フィールドの変更イベントリスナー
+    document.addEventListener('DOMContentLoaded', () => {
+        const inputFields = [
+            'monthly_total', 'monthly_deduction', 'year_end_adjustment',
+            'bonus_total', 'bonus_deduction'
+        ];
+        
+        // 各入力フィールドに変更イベントリスナーを追加
+        inputFields.forEach(fieldId => {
+            document.getElementById(fieldId).addEventListener('input', updateCalculatedFields);
+        });
+        
+        // 初期値の計算
+        updateCalculatedFields();
+    });
+</script>
+{% endblock %} 
